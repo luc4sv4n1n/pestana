@@ -30,6 +30,7 @@ from playwright.async_api import async_playwright
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fipe_client import buscar_valor_mercado, fmt_brl as _fmt_ddg, _detectar_categorias, _parse_titulo
+from supabase_client import SupabaseClient
 
 
 CYAN   = "\033[96m"
@@ -646,6 +647,47 @@ def normalize_to_db(lote: dict) -> dict | None:
     }
 
 
+# ─── Upload para Supabase ────────────────────────────────────────────────────
+
+def upload_to_supabase(lotes: list[dict]) -> dict:
+    try:
+        db = SupabaseClient()
+    except Exception as e:
+        print(f"\n  {RED}❌  Falha ao inicializar SupabaseClient: {e}{RESET}")
+        print(f"  {YELLOW}⚠️  Verifique as variáveis SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY{RESET}")
+        return {"inserted": 0, "updated": 0, "errors": len(lotes), "duplicates_removed": 0}
+
+    registros, skipped = [], 0
+    for lote in lotes:
+        rec = normalize_to_db(lote)
+        if rec:
+            registros.append(rec)
+        else:
+            skipped += 1
+
+    if skipped:
+        print(f"  {YELLOW}⚠️  {skipped} lote(s) ignorado(s) (sem link/ano/lance){RESET}")
+    if not registros:
+        print(f"  {RED}Nenhum registro válido para upload.{RESET}")
+        return {}
+
+    print(f"\n{BOLD}{'='*68}{RESET}")
+    print(f"{BOLD}  ☁️   UPLOAD → auctions.veiculos  ({len(registros)} registros){RESET}")
+    print(f"{BOLD}{'='*68}{RESET}\n")
+
+    try:
+        stats   = db.upsert_veiculos(registros)
+        total_s = stats.get("inserted", 0) + stats.get("updated", 0)
+        print(f"\n  ✅  Enviados:        {total_s}  "
+              f"({stats.get('inserted',0)} novos + {stats.get('updated',0)} atualizados)")
+        print(f"  🔄  Dupes removidas: {stats.get('duplicates_removed', 0)}")
+        print(f"  ❌  Erros:           {stats.get('errors', 0)}\n")
+        return stats
+    except Exception as e:
+        print(f"\n  {RED}❌  Erro no upsert: {e}{RESET}\n")
+        return {"inserted": 0, "updated": 0, "errors": len(registros), "duplicates_removed": 0}
+
+
 # ─── Print ────────────────────────────────────────────────────────────────────
 
 def print_lote(lote: dict, i: int, total: int):
@@ -759,22 +801,7 @@ async def main():
 
     # ── 7. Upload Supabase ───────────────────────────────────────────────
     if not args.no_upload:
-        from supabase_client import SupabaseClient
-
-        registros = [normalize_to_db(l) for l in lotes]
-        registros = [r for r in registros if r]
-
-        print(f"\n{BOLD}{'='*68}{RESET}")
-        print(f"{BOLD}  ☁️   UPLOAD → auctions.veiculos  ({len(registros)} registros){RESET}")
-        print(f"{BOLD}{'='*68}{RESET}\n")
-
-        db    = SupabaseClient()
-        stats = db.upsert_veiculos(registros)
-        total_s = stats.get("inserted", 0) + stats.get("updated", 0)
-        print(f"\n  ✅  Enviados:        {total_s}  "
-              f"({stats.get('inserted',0)} novos + {stats.get('updated',0)} atualizados)")
-        print(f"  🔄  Dupes removidas: {stats.get('duplicates_removed', 0)}")
-        print(f"  ❌  Erros:           {stats.get('errors', 0)}\n")
+        upload_to_supabase(lotes)
 
 
 if __name__ == "__main__":
