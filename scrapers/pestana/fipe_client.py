@@ -65,8 +65,18 @@ PALAVRAS_TRUCK = {
     "atego", "actros", "axor", "tector", "stralis", "vertis",
 }
 
-# Prefixos de modelo que indicam truck (VW 24.280, MB 2635 etc)
-RE_MODELO_TRUCK = re.compile(r"^\d{2,3}[\.\d]")
+# Prefixos de modelo que indicam truck:
+#   - número com ponto: "24.280", "9.150" (VW, Ford Cargo)
+#   - 4+ dígitos: "1719", "2630" (Mercedes, VW pesados)
+# NÃO pega: "208", "307", "2008" (Peugeot), "500" (Fiat), "3008" seria 4 dígitos
+# mas Peugeot 3008 começa com "3008" — logo excluímos marcas conhecidas de carro
+RE_MODELO_TRUCK = re.compile(r"^\d{2,3}\.\d|^\d{4,}")
+
+# Marcas que usam números como nome de modelo (carros) — nunca são truck
+MARCAS_MODELO_NUMERICO = {
+    "peugeot", "fiat", "bmw", "mercedes-benz", "audi", "volvo",
+    "alfa romeo", "citroen", "renault",
+}
 
 
 def _detectar_categorias(marca_norm: str, modelo_norm: str) -> list[str]:
@@ -76,8 +86,9 @@ def _detectar_categorias(marca_norm: str, modelo_norm: str) -> list[str]:
     """
     m1 = modelo_norm.split()[0] if modelo_norm.split() else ""
 
-    # Truck: modelo começa com número tipo "24.280", "2628" etc
-    if RE_MODELO_TRUCK.match(modelo_norm):
+    # Truck: modelo começa com número tipo "24.280", "1719" etc
+    # Mas ignora se a marca é conhecida por usar números como nome (Peugeot 208, Fiat 500)
+    if RE_MODELO_TRUCK.match(modelo_norm) and marca_norm not in MARCAS_MODELO_NUMERICO:
         return ["trucks", "cars"]
 
     # Truck por palavra-chave no modelo
