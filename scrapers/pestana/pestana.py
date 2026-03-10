@@ -476,7 +476,7 @@ async def enriquecer_fipe(lotes: list[dict]) -> list[dict]:
 
         r = await buscar_valor_mercado(_titulo_para_query(titulo))
 
-        if r["valor"]:
+        if r["valor"] and r.get("confiavel", True):
             lote["fipe_raw"]   = r["valor"]
             lote["fipe"]       = _fmt_ddg(r["valor"])
             lote["fipe_min"]   = r["valor_min"]
@@ -508,7 +508,8 @@ async def enriquecer_fipe(lotes: list[dict]) -> list[dict]:
             print(f"→ fipe_min {lote['fipe']}  {label}")
             ok += 1
         else:
-            print(f"→ {RED}não encontrado{RESET}")
+            motivo = "ano divergente" if r["valor"] and not r.get("confiavel", True) else "não encontrado"
+            print(f"→ {RED}{motivo}{RESET}")
             falhou += 1
 
         await asyncio.sleep(1.2)

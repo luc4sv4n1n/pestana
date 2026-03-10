@@ -411,6 +411,7 @@ async def buscar_valor_mercado(titulo: str, debug: bool = False) -> dict:
     resultado = {
         "query": titulo, "valor": None, "valor_min": None,
         "valor_max": None, "fonte": None, "snippet": None,
+        "confiavel": False,
     }
 
     marca_norm, modelo_norm, ano_fab, ano_mod = _parse_titulo(titulo)
@@ -494,16 +495,28 @@ async def buscar_valor_mercado(titulo: str, debug: bool = False) -> dict:
         tags.append(f"ano_ref:{ref.get('modelYear')}")
     tag_str = f" [{' · '.join(tags)}]" if tags else ""
 
+    # Confiabilidade: ano retornado não pode divergir > 5 anos do pedido
+    ano_retornado = ref.get("modelYear") or ref.get("anoModelo")
+    try:
+        ano_ret_int = int(str(ano_retornado)[:4])
+        ano_ref_int = ano_mod or ano_fab or ano_ret_int
+        ano_diff    = abs(ano_ret_int - ano_ref_int)
+    except Exception:
+        ano_diff = 0
+    confiavel = ano_diff <= 5
+
     resultado.update({
-        "valor":     round(valor_min),
-        "valor_min": round(valor_min),
-        "valor_max": round(valor_max),
-        "fonte":     "fipe_parallelum",
+        "valor":      round(valor_min),
+        "valor_min":  round(valor_min),
+        "valor_max":  round(valor_max),
+        "fonte":      "fipe_parallelum",
+        "confiavel":  confiavel,
         "snippet": (
             f"{ref.get('brand')} {ref.get('model')} {ref.get('modelYear')} "
             f"→ min {fmt_brl(valor_min)} / max {fmt_brl(valor_max)} "
             f"[{len(precos)} versão(ões)] [{ref.get('referenceMonth')}] "
             f"[match: {modelo['name']} score={modelo_score:.2f}]{tag_str}"
+            + ("" if confiavel else " ⚠ ANO_DIVERGENTE")
         ),
     })
     return resultado
