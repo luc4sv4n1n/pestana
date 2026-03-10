@@ -78,6 +78,18 @@ MARCAS_MODELO_NUMERICO = {
     "alfa romeo", "citroen", "renault",
 }
 
+# Marcas que SÓ fabricam carros/SUVs de passeio — nunca truck nem moto
+MARCAS_SOMENTE_CARRO = {
+    "jac", "byd", "chery", "caoa chery", "gwm", "great wall", "haval",
+    "lifan", "geely", "mg", "subaru", "mitsubishi", "nissan", "toyota",
+    "hyundai", "kia", "honda", "chevrolet", "ford", "volkswagen",
+    "jeep", "dodge", "ram", "land rover", "land-rover", "jaguar",
+    "porsche", "lexus", "infiniti", "acura", "tesla", "rivian",
+    "peugeot", "fiat", "bmw", "mercedes-benz", "audi", "volvo",
+    "alfa romeo", "citroen", "renault", "seat", "skoda", "dacia",
+    "smart", "mini", "genesis", "ssangyong", "troller",
+}
+
 
 def _detectar_categorias(marca_norm: str, modelo_norm: str) -> list[str]:
     """
@@ -85,6 +97,10 @@ def _detectar_categorias(marca_norm: str, modelo_norm: str) -> list[str]:
     Evita tentar 3 categorias quando a resposta é óbvia — economiza requests.
     """
     m1 = modelo_norm.split()[0] if modelo_norm.split() else ""
+
+    # Marcas que só fazem carros — nunca truck, nunca moto
+    if marca_norm in MARCAS_SOMENTE_CARRO:
+        return ["cars"]
 
     # Truck: modelo começa com número tipo "24.280", "1719" etc
     # Mas ignora se a marca é conhecida por usar números como nome (Peugeot 208, Fiat 500)
