@@ -614,6 +614,9 @@ def normalize_to_db(lote: dict) -> dict | None:
         return None
     if not lote.get("fipe_raw"):
         return None
+    # Só sobe lotes com margem líquida calculada (≥ R$ 10.000)
+    if not lote.get("margem_liquida"):
+        return None
 
     imagens = lote.get("imagens") or []
 
@@ -658,16 +661,23 @@ def upload_to_supabase(lotes: list[dict]) -> dict:
         print(f"  {YELLOW}⚠️  Verifique as variáveis SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY{RESET}")
         return {"inserted": 0, "updated": 0, "errors": len(lotes), "duplicates_removed": 0}
 
-    registros, skipped = [], 0
+    registros, skipped_sem_margem, skipped_outros = [], 0, 0
     for lote in lotes:
+        # Pré-check: tem fipe mas não tem margem → sem margem (não sobe)
+        tem_fipe   = bool(lote.get("fipe_raw"))
+        tem_margem = bool(lote.get("margem_liquida"))
         rec = normalize_to_db(lote)
         if rec:
             registros.append(rec)
+        elif tem_fipe and not tem_margem:
+            skipped_sem_margem += 1
         else:
-            skipped += 1
+            skipped_outros += 1
 
-    if skipped:
-        print(f"  {YELLOW}⚠️  {skipped} lote(s) ignorado(s) (sem link/ano/lance){RESET}")
+    if skipped_sem_margem:
+        print(f"  {YELLOW}⚠️   {skipped_sem_margem} lote(s) ignorado(s) — sem margem líquida (não sobe pro banco){RESET}")
+    if skipped_outros:
+        print(f"  {YELLOW}⚠️   {skipped_outros} lote(s) ignorado(s) — sem link/ano/lance/FIPE{RESET}")
     if not registros:
         print(f"  {RED}Nenhum registro válido para upload.{RESET}")
         return {}
