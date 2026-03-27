@@ -5,6 +5,8 @@ pestana.py — Scraper Pestana Leilões → auctions.veiculos
 Coleta veículos retomados via Playwright (site renderizado por JS),
 enriquece com FIPE via DDG e sobe pro Supabase.
 
+Regra premium: percentual_abaixo_fipe >= 50 → premium = True
+
 Uso local (debug):
     python pestana.py --no-upload
     python pestana.py --no-upload --output pestana_debug.json
@@ -40,6 +42,8 @@ RED    = "\033[91m"
 RESET  = "\033[0m"
 BOLD   = "\033[1m"
 DIM    = "\033[2m"
+
+PREMIUM_DESCONTO_MIN = 50.0   # % abaixo da FIPE para marcar como premium
 
 
 # ─── Config ───────────────────────────────────────────────────────────────────
@@ -323,7 +327,6 @@ def extract(card: dict, detalhe: dict) -> dict | None:
     texto_det = detalhe.get("texto_pagina", "")
 
     # ── Valores ──────────────────────────────────────────────────────────
-    # Tenta pegar da listagem primeiro, senão do detalhe
     lance_raw = parse_brl(card.get("lance_inicial")) or parse_lance(texto_det)
 
     # ── Datas ─────────────────────────────────────────────────────────────
@@ -353,7 +356,6 @@ def extract(card: dict, detalhe: dict) -> dict | None:
 
     # ── Imagens ───────────────────────────────────────────────────────────
     imagens = detalhe.get("imagens") or []
-    # Normaliza e deduplica imagens (remove query string de resize)
     seen_imgs = set()
     imagens_unicas = []
     for img in imagens:
@@ -500,16 +502,23 @@ async def enriquecer_fipe(lotes: list[dict]) -> list[dict]:
                     lote["margem_liquida"]     = margem_liq
                     lote["margem_liquida_fmt"] = _fmt_ddg(margem_liq)
 
+            # ── Flag premium: ≥ PREMIUM_DESCONTO_MIN % abaixo da FIPE ──
+            lote["is_premium"] = bool(
+                lote.get("desconto_pct") and lote["desconto_pct"] >= PREMIUM_DESCONTO_MIN
+            )
+
+            premium_tag = f" {CYAN}★ PREMIUM{RESET}" if lote["is_premium"] else ""
             label = (
                 f"{GREEN}({lote['desconto_pct']}% desc · liq {lote['margem_liquida_fmt']}){RESET}"
                 if lote.get("desconto_pct")
                 else f"{YELLOW}sem margem{RESET}"
             )
-            print(f"→ fipe_min {lote['fipe']}  {label}")
+            print(f"→ fipe_min {lote['fipe']}  {label}{premium_tag}")
             ok += 1
         else:
             motivo = "ano divergente" if r["valor"] and not r.get("confiavel", True) else "não encontrado"
             print(f"→ {RED}{motivo}{RESET}")
+            lote["is_premium"] = False
             falhou += 1
 
         await asyncio.sleep(1.2)
@@ -625,6 +634,11 @@ def normalize_to_db(lote: dict) -> dict | None:
     _cats = _detectar_categorias(_marca_n or "", _modelo_n or "")
     _tipo = {"motorcycles": "moto", "trucks": "truck"}.get(_cats[0], "carro")
 
+    # ── Premium: ≥ PREMIUM_DESCONTO_MIN % abaixo da FIPE ────────────────
+    is_premium = bool(
+        lote.get("desconto_pct") and lote["desconto_pct"] >= PREMIUM_DESCONTO_MIN
+    )
+
     return {
         "titulo":                 lote["titulo"],
         "descricao":              lote.get("localizacao"),
@@ -648,6 +662,7 @@ def normalize_to_db(lote: dict) -> dict | None:
         "km":                     lote.get("km"),
         "origem":                 "Retomado",
         "ativo":                  True,
+        "premium":                is_premium,      # ← NOVO: True se ≥ 50% abaixo FIPE
     }
 
 
@@ -663,7 +678,6 @@ def upload_to_supabase(lotes: list[dict]) -> dict:
 
     registros, skipped_sem_margem, skipped_outros = [], 0, 0
     for lote in lotes:
-        # Pré-check: tem fipe mas não tem margem → sem margem (não sobe)
         tem_fipe   = bool(lote.get("fipe_raw"))
         tem_margem = bool(lote.get("margem_liquida"))
         rec = normalize_to_db(lote)
@@ -682,9 +696,13 @@ def upload_to_supabase(lotes: list[dict]) -> dict:
         print(f"  {RED}Nenhum registro válido para upload.{RESET}")
         return {}
 
+    premium_count = sum(1 for r in registros if r.get("premium"))
+
     print(f"\n{BOLD}{'='*68}{RESET}")
     print(f"{BOLD}  ☁️   UPLOAD → auctions.veiculos  ({len(registros)} registros){RESET}")
-    print(f"{BOLD}{'='*68}{RESET}\n")
+    print(f"{BOLD}{'='*68}{RESET}")
+    if premium_count:
+        print(f"  {CYAN}★   Premium (≥{PREMIUM_DESCONTO_MIN:.0f}% abaixo FIPE): {premium_count}{RESET}\n")
 
     try:
         stats   = db.upsert_veiculos(registros)
@@ -714,9 +732,10 @@ def print_lote(lote: dict, i: int, total: int):
         f"  {GREEN}{lote['desconto_pct']}% abaixo FIPE{RESET}"
         if lote.get("desconto_pct") else ""
     )
+    premium_str = f"  {CYAN}{BOLD}★ PREMIUM{RESET}" if lote.get("is_premium") else ""
 
     print(f"\n{'─'*68}")
-    print(f"{BOLD}{YELLOW}[{i}/{total}] {titulo}{RESET}")
+    print(f"{BOLD}{YELLOW}[{i}/{total}] {titulo}{RESET}{premium_str}")
     print(f"{'─'*68}")
     print(f"  {DIM}marca:{RESET}        {lote['marca']}  ·  {lote['modelo']}")
     print(f"  {DIM}ano:{RESET}          {ano_str}  ·  {km_str}  ·  {lote['combustivel'] or '?'}")
@@ -735,11 +754,11 @@ def print_lote(lote: dict, i: int, total: int):
 
 async def main():
     parser = argparse.ArgumentParser(description="Pestana Leilões → auctions.veiculos")
-    parser.add_argument("--no-upload",   action="store_true", help="Não sobe pro Supabase (debug local)")
-    parser.add_argument("--no-fipe",     action="store_true", help="Pula busca DDG (mais rápido, sem margem)")
+    parser.add_argument("--no-upload",    action="store_true", help="Não sobe pro Supabase (debug local)")
+    parser.add_argument("--no-fipe",      action="store_true", help="Pula busca DDG (mais rápido, sem margem)")
     parser.add_argument("--show-browser", action="store_true", help="Abre browser visível (debug)")
-    parser.add_argument("--limit",       type=int, default=0,  help="Limita a N lotes (debug, ex: --limit 1)")
-    parser.add_argument("--output",      default="pestana_coleta.json")
+    parser.add_argument("--limit",        type=int, default=0,  help="Limita a N lotes (debug, ex: --limit 1)")
+    parser.add_argument("--output",       default="pestana_coleta.json")
     args = parser.parse_args()
 
     headless = not args.show_browser
@@ -748,7 +767,8 @@ async def main():
     print(f"{BOLD}  🏠  PESTANA LEILÕES — COLETA COMPLETA{RESET}")
     print(f"{BOLD}{'='*68}{RESET}")
     print(f"  {DIM}URL base: {LISTAGEM_URL.format(pagina=1)}{RESET}")
-    print(f"  {DIM}upload:   {'nao (debug)' if args.no_upload else 'sim → auctions.veiculos'}{RESET}\n")
+    print(f"  {DIM}upload:   {'nao (debug)' if args.no_upload else 'sim → auctions.veiculos'}{RESET}")
+    print(f"  {DIM}premium:  ≥ {PREMIUM_DESCONTO_MIN:.0f}% abaixo da FIPE{RESET}\n")
 
     # ── 1. Coleta Playwright ─────────────────────────────────────────────
     print(f"{BOLD}  🌐  Coletando com Playwright...{RESET}\n")
@@ -780,10 +800,11 @@ async def main():
     for i, lote in enumerate(lotes, 1):
         print_lote(lote, i, len(lotes))
 
-    com_fipe   = sum(1 for l in lotes if l.get("fipe_raw"))
-    com_margem = sum(1 for l in lotes if l.get("margem_liquida"))
-    com_imagem = sum(1 for l in lotes if l.get("imagens"))
-    com_lance  = sum(1 for l in lotes if l.get("lance_raw"))
+    com_fipe    = sum(1 for l in lotes if l.get("fipe_raw"))
+    com_margem  = sum(1 for l in lotes if l.get("margem_liquida"))
+    com_imagem  = sum(1 for l in lotes if l.get("imagens"))
+    com_lance   = sum(1 for l in lotes if l.get("lance_raw"))
+    com_premium = sum(1 for l in lotes if l.get("is_premium"))
 
     print(f"\n\n{'='*68}")
     print(f"{BOLD}  📊  RESUMO{RESET}")
@@ -793,6 +814,7 @@ async def main():
     print(f"  Com FIPE DDG:     {com_fipe}")
     print(f"  Com margem:       {com_margem}")
     print(f"  Com imagem:       {com_imagem}")
+    print(f"  {CYAN}★ Premium (≥{PREMIUM_DESCONTO_MIN:.0f}%): {com_premium}{RESET}")
     if com_margem:
         top = [l for l in lotes if l.get("margem_liquida")]
         print(f"  Melhor margem:    {top[0]['margem_liquida_fmt']}  ({top[0]['titulo'][:45]})")
@@ -804,6 +826,7 @@ async def main():
         "total_lotes":  len(lotes),
         "com_fipe":     com_fipe,
         "com_margem":   com_margem,
+        "com_premium":  com_premium,
         "lotes":        lotes,
     }
     with open(args.output, "w", encoding="utf-8") as f:
