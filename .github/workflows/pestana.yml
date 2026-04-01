@@ -1,15 +1,15 @@
-name: 🏠 Pestana - Coleta Completa
+name: 🚁 Pestana - Drones
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 8 * * *'  # Diariamente às 8h UTC (5h BRT)
+    - cron: '0 9 * * *'  # Diariamente às 9h UTC (6h BRT)
 
 jobs:
-  pestana-scraper:
-    name: 🏠 Pestana - Scrape + Upload Supabase
+  drone-scraper:
+    name: 🚁 Pestana Drones - Scrape + Upload Supabase
     runs-on: ubuntu-22.04
-    timeout-minutes: 90
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -28,52 +28,52 @@ jobs:
         run: |
           playwright install chromium --with-deps
 
-      - name: Run Pestana Scraper
+      - name: Run Drone Scraper
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           PYTHONPATH: ${{ github.workspace }}/scrapers
         run: |
           echo "========================================"
-          echo "🏠 PESTANA LEILÕES - COLETA COMPLETA"
+          echo "🚁 PESTANA LEILÕES - DRONES"
           echo "========================================"
           echo "📅 Início: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           echo "🇧🇷 Horário Brasil: $(TZ='America/Sao_Paulo' date '+%Y-%m-%d %H:%M:%S BRT')"
           echo "========================================"
           echo ""
           echo "🔥 Filtros ativos:"
-          echo "   • Origem: Retomado"
-          echo "   • Ano: 2014 - 2025"
-          echo "   • Lotes por página: 96"
+          echo "   • Busca: drone"
+          echo "   • Exclui: sucatas, câmeras de segurança"
+          echo "   • Premium: ≥ 40% abaixo do mercado"
           echo ""
-          echo "☁️  Destino: auctions.veiculos (Supabase)"
+          echo "☁️  Destino: auctions.tecnologia (Supabase)"
           echo "========================================"
 
-          cd scrapers/pestana
-          python pestana.py --output /tmp/pestana_coleta.json
+          cd scrapers/pestana/scrapers/pestana
+          python drone.py --output /tmp/drone_coleta.json
 
           echo ""
-          echo "✅ Pestana concluído: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "✅ Drones concluído: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 
       - name: Upload JSON (Debug)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pestana-${{ github.run_number }}
-          path: /tmp/pestana_coleta.json
+          name: drone-${{ github.run_number }}
+          path: /tmp/drone_coleta.json
           retention-days: 3
 
       - name: Generate Summary
         if: always()
         run: |
-          echo "## 🏠 Pestana Leilões — Coleta + Upload Supabase" >> $GITHUB_STEP_SUMMARY
+          echo "## 🚁 Pestana Drones — Coleta + Upload Supabase" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "**Modo:** Manual" >> $GITHUB_STEP_SUMMARY
           else
             echo "**Modo:** Cron (automático diário)" >> $GITHUB_STEP_SUMMARY
-            echo "**Frequência:** Diariamente às 8h UTC (5h BRT)" >> $GITHUB_STEP_SUMMARY
+            echo "**Frequência:** Diariamente às 9h UTC (6h BRT)" >> $GITHUB_STEP_SUMMARY
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -82,24 +82,25 @@ jobs:
           echo "**Horário Brasil:** $(TZ='America/Sao_Paulo' date '+%Y-%m-%d %H:%M')" >> $GITHUB_STEP_SUMMARY
           echo "**Run ID:** ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔧 Filtros:" >> $GITHUB_STEP_SUMMARY
-          echo "- **Origem:** Retomado" >> $GITHUB_STEP_SUMMARY
-          echo "- **Ano:** 2014 – 2025" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔧 Configuração:" >> $GITHUB_STEP_SUMMARY
           echo "- **Scraper:** Playwright (Chromium headless)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Preço de mercado:** Mercado Livre (scrape)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bundle:** busca com sufixo 'combo' no ML" >> $GITHUB_STEP_SUMMARY
+          echo "- **Premium:** ≥ 40% abaixo do mercado" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### ☁️ Destino:" >> $GITHUB_STEP_SUMMARY
           echo "- **Schema:** auctions" >> $GITHUB_STEP_SUMMARY
-          echo "- **Tabela:** veiculos" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tabela:** tecnologia" >> $GITHUB_STEP_SUMMARY
+          echo "- **Sub-categorias:** drone · drone_kit" >> $GITHUB_STEP_SUMMARY
           echo "- **Conflict key:** link (URL do lote)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Origem:** Retomado" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          if [ -f /tmp/pestana_coleta.json ]; then
-            TOTAL=$(python3 -c "import json; d=json.load(open('/tmp/pestana_coleta.json')); print(d.get('total_lotes', '?'))" 2>/dev/null || echo "?")
-            COM_FIPE=$(python3 -c "import json; d=json.load(open('/tmp/pestana_coleta.json')); print(d.get('com_fipe', '?'))" 2>/dev/null || echo "?")
-            COM_MARGEM=$(python3 -c "import json; d=json.load(open('/tmp/pestana_coleta.json')); print(d.get('com_margem', '?'))" 2>/dev/null || echo "?")
+          if [ -f /tmp/drone_coleta.json ]; then
+            TOTAL=$(python3 -c "import json; d=json.load(open('/tmp/drone_coleta.json')); print(d.get('total_lotes', '?'))" 2>/dev/null || echo "?")
+            COM_MERCADO=$(python3 -c "import json; d=json.load(open('/tmp/drone_coleta.json')); print(d.get('com_mercado', '?'))" 2>/dev/null || echo "?")
+            COM_PREMIUM=$(python3 -c "import json; d=json.load(open('/tmp/drone_coleta.json')); print(d.get('com_premium', '?'))" 2>/dev/null || echo "?")
             echo "### 📊 Resultado:" >> $GITHUB_STEP_SUMMARY
-            echo "- **Total lotes:** $TOTAL" >> $GITHUB_STEP_SUMMARY
-            echo "- **Com FIPE:** $COM_FIPE" >> $GITHUB_STEP_SUMMARY
-            echo "- **Com margem calculada:** $COM_MARGEM" >> $GITHUB_STEP_SUMMARY
+            echo "- **Total drones:** $TOTAL" >> $GITHUB_STEP_SUMMARY
+            echo "- **Com preço ML:** $COM_MERCADO" >> $GITHUB_STEP_SUMMARY
+            echo "- **Premium (≥40%):** $COM_PREMIUM" >> $GITHUB_STEP_SUMMARY
           fi

@@ -1,0 +1,46 @@
+{
+  "timestamp": "2026-04-01T18:58:13.665166+00:00",
+  "total_lotes": 1,
+  "com_mercado": 1,
+  "com_premium": 0,
+  "lotes": [
+    {
+      "titulo": "Drone dji Avata 2 FMC, acompanha 3 baterias e seus devidos acessórios",
+      "marca": "DJI",
+      "modelo": "Avata 2",
+      "link": "https://www.pestanaleiloes.com.br/agenda-de-leiloes/5802/410305",
+      "query_ml": "drone DJI Avata 2 combo",
+      "bundle": true,
+      "bundle_extras": [
+        "3 baterias"
+      ],
+      "lance_raw": 5900.0,
+      "lance": "R$ 5.900,00",
+      "preco_mercado": 9659.69,
+      "preco_mercado_min": 2390.0,
+      "preco_mercado_max": 20312.0,
+      "preco_mercado_fmt": "R$ 9.659,69",
+      "desconto_pct": 38.9,
+      "desconto_label": "38.9% abaixo do mercado (vs. combo ML)",
+      "acima_mercado": false,
+      "margem_bruta": 3759.69,
+      "margem_bruta_fmt": "R$ 3.759,69",
+      "serie": null,
+      "placa": null,
+      "tipo_bem": null,
+      "estado": "RS",
+      "cidade": "Cachoeirinha",
+      "localizacao": "R. Papa João XXIII, 1121 - Vila Cachoeirinha - Cachoeirinha RS",
+      "data_leilao": "2026-04-06T10:00:00",
+      "nome_leilao": "Leilão Bolsa de Materiais Máquinas e Equipamentos - 06/04 - 10:00",
+      "origem": "Pestana",
+      "imagens": [
+        "https://ged.pestanaleiloes.com.br/ged/18434893.jpg",
+        "https://ged.pestanaleiloes.com.br/ged/18434890.jpg",
+        "https://ged.pestanaleiloes.com.br/ged/15038779.png"
+      ],
+      "is_premium": false,
+      "preco_mercado_url": "https://lista.mercadolivre.com.br/drone-DJI-Avata-2-combo_OrderId_PRICE_NoIndex_True"
+    }
+  ]
+}
