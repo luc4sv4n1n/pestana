@@ -1,15 +1,17 @@
-name: 🚁 Pestana - Drones
+name: 🏠🚁 Pestana - Veículos + Drones
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 9 * * *'  # Diariamente às 9h UTC (6h BRT)
+    - cron: '0 8 * * *'  # Diariamente às 8h UTC (5h BRT)
 
 jobs:
-  drone-scraper:
-    name: 🚁 Pestana Drones - Scrape + Upload Supabase
+
+  # ── 1. Veículos ────────────────────────────────────────────────────────────
+  veiculos:
+    name: 🏠 Veículos → auctions.veiculos
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
@@ -21,86 +23,116 @@ jobs:
           python-version: '3.11'
 
       - name: Install Dependencies
-        run: |
-          pip install requests==2.31.0 python-dotenv==1.0.1 playwright==1.44.0 httpx==0.27.0
+        run: pip install requests==2.31.0 python-dotenv==1.0.1 playwright==1.44.0 httpx==0.27.0
 
       - name: Install Playwright Browsers
-        run: |
-          playwright install chromium --with-deps
+        run: playwright install chromium --with-deps
 
-      - name: Run Drone Scraper
+      - name: Run Pestana Veículos
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           PYTHONPATH: ${{ github.workspace }}/scrapers
         run: |
-          echo "========================================"
-          echo "🚁 PESTANA LEILÕES - DRONES"
-          echo "========================================"
-          echo "📅 Início: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          echo "🇧🇷 Horário Brasil: $(TZ='America/Sao_Paulo' date '+%Y-%m-%d %H:%M:%S BRT')"
-          echo "========================================"
-          echo ""
-          echo "🔥 Filtros ativos:"
-          echo "   • Busca: drone"
-          echo "   • Exclui: sucatas, câmeras de segurança"
-          echo "   • Premium: ≥ 40% abaixo do mercado"
-          echo ""
-          echo "☁️  Destino: auctions.tecnologia (Supabase)"
-          echo "========================================"
-
+          echo "🏠 PESTANA — VEÍCULOS"
+          echo "📅 $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           cd scrapers/pestana
-          python drone.py --output /tmp/drone_coleta.json
+          python pestana.py --output /tmp/pestana_coleta.json
+          echo "✅ Veículos concluído: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 
-          echo ""
-          echo "✅ Drones concluído: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-
-      - name: Upload JSON (Debug)
+      - name: Upload JSON Veículos
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: drone-${{ github.run_number }}
+          name: pestana-veiculos-${{ github.run_number }}
+          path: /tmp/pestana_coleta.json
+          retention-days: 3
+
+  # ── 2. Drones (roda depois dos veículos) ───────────────────────────────────
+  drones:
+    name: 🚁 Drones → auctions.tecnologia
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    needs: veiculos   # ← só começa após veículos terminar
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: pip install requests==2.31.0 python-dotenv==1.0.1 playwright==1.44.0 httpx==0.27.0
+
+      - name: Install Playwright Browsers
+        run: playwright install chromium --with-deps
+
+      - name: Run Pestana Drones
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PYTHONPATH: ${{ github.workspace }}/scrapers
+        run: |
+          echo "🚁 PESTANA — DRONES"
+          echo "📅 $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          cd scrapers/pestana
+          python drone.py --output /tmp/drone_coleta.json
+          echo "✅ Drones concluído: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+
+      - name: Upload JSON Drones
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pestana-drones-${{ github.run_number }}
           path: /tmp/drone_coleta.json
           retention-days: 3
 
+  # ── Summary ────────────────────────────────────────────────────────────────
+  summary:
+    name: 📊 Resumo
+    runs-on: ubuntu-22.04
+    needs: [veiculos, drones]
+    if: always()
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/artifacts
+
       - name: Generate Summary
-        if: always()
         run: |
-          echo "## 🚁 Pestana Drones — Coleta + Upload Supabase" >> $GITHUB_STEP_SUMMARY
+          echo "## 🏠🚁 Pestana — Veículos + Drones" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Data:** $(TZ='America/Sao_Paulo' date '+%d/%m/%Y %H:%M') BRT" >> $GITHUB_STEP_SUMMARY
+          echo "**Run:** #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "**Modo:** Manual" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "**Modo:** Cron (automático diário)" >> $GITHUB_STEP_SUMMARY
-            echo "**Frequência:** Diariamente às 9h UTC (6h BRT)" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 🏠 Veículos | ${{ needs.veiculos.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🚁 Drones   | ${{ needs.drones.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          VEIC_JSON=$(find /tmp/artifacts -name "pestana_coleta.json" | head -1)
+          DRONE_JSON=$(find /tmp/artifacts -name "drone_coleta.json" | head -1)
+
+          if [ -f "$VEIC_JSON" ]; then
+            TOTAL_V=$(python3 -c "import json; d=json.load(open('$VEIC_JSON')); print(d.get('total_lotes','?'))" 2>/dev/null || echo "?")
+            FIPE_V=$(python3 -c "import json; d=json.load(open('$VEIC_JSON')); print(d.get('com_fipe','?'))" 2>/dev/null || echo "?")
+            PREM_V=$(python3 -c "import json; d=json.load(open('$VEIC_JSON')); print(d.get('com_premium','?'))" 2>/dev/null || echo "?")
+            echo "### 🏠 Veículos (auctions.veiculos)" >> $GITHUB_STEP_SUMMARY
+            echo "- Total: **$TOTAL_V** · Com FIPE: **$FIPE_V** · Premium: **$PREM_V**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
           fi
 
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Horário UTC:** $(date -u '+%Y-%m-%d %H:%M')" >> $GITHUB_STEP_SUMMARY
-          echo "**Horário Brasil:** $(TZ='America/Sao_Paulo' date '+%Y-%m-%d %H:%M')" >> $GITHUB_STEP_SUMMARY
-          echo "**Run ID:** ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔧 Configuração:" >> $GITHUB_STEP_SUMMARY
-          echo "- **Scraper:** Playwright (Chromium headless)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Preço de mercado:** Mercado Livre (scrape)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Bundle:** busca com sufixo 'combo' no ML" >> $GITHUB_STEP_SUMMARY
-          echo "- **Premium:** ≥ 40% abaixo do mercado" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### ☁️ Destino:" >> $GITHUB_STEP_SUMMARY
-          echo "- **Schema:** auctions" >> $GITHUB_STEP_SUMMARY
-          echo "- **Tabela:** tecnologia" >> $GITHUB_STEP_SUMMARY
-          echo "- **Sub-categorias:** drone · drone_kit" >> $GITHUB_STEP_SUMMARY
-          echo "- **Conflict key:** link (URL do lote)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          if [ -f /tmp/drone_coleta.json ]; then
-            TOTAL=$(python3 -c "import json; d=json.load(open('/tmp/drone_coleta.json')); print(d.get('total_lotes', '?'))" 2>/dev/null || echo "?")
-            COM_MERCADO=$(python3 -c "import json; d=json.load(open('/tmp/drone_coleta.json')); print(d.get('com_mercado', '?'))" 2>/dev/null || echo "?")
-            COM_PREMIUM=$(python3 -c "import json; d=json.load(open('/tmp/drone_coleta.json')); print(d.get('com_premium', '?'))" 2>/dev/null || echo "?")
-            echo "### 📊 Resultado:" >> $GITHUB_STEP_SUMMARY
-            echo "- **Total drones:** $TOTAL" >> $GITHUB_STEP_SUMMARY
-            echo "- **Com preço ML:** $COM_MERCADO" >> $GITHUB_STEP_SUMMARY
-            echo "- **Premium (≥40%):** $COM_PREMIUM" >> $GITHUB_STEP_SUMMARY
+          if [ -f "$DRONE_JSON" ]; then
+            TOTAL_D=$(python3 -c "import json; d=json.load(open('$DRONE_JSON')); print(d.get('total_lotes','?'))" 2>/dev/null || echo "?")
+            ML_D=$(python3 -c "import json; d=json.load(open('$DRONE_JSON')); print(d.get('com_mercado','?'))" 2>/dev/null || echo "?")
+            PREM_D=$(python3 -c "import json; d=json.load(open('$DRONE_JSON')); print(d.get('com_premium','?'))" 2>/dev/null || echo "?")
+            echo "### 🚁 Drones (auctions.tecnologia)" >> $GITHUB_STEP_SUMMARY
+            echo "- Total: **$TOTAL_D** · Com preço ML: **$ML_D** · Premium: **$PREM_D**" >> $GITHUB_STEP_SUMMARY
           fi
