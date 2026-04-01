@@ -939,7 +939,7 @@ def normalize_to_db(lote: dict) -> dict | None:
     return {
         "titulo":                    lote["titulo"],
         "descricao":                 lote.get("localizacao"),
-        "tipo":                      "drone",
+        "tipo":                      "equipamento",
         "sub_categoria":             "drone_kit" if bundle else "drone",
         "marca":                     lote.get("marca"),
         "modelo":                    lote.get("modelo"),

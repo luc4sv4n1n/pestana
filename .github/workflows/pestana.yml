@@ -32,6 +32,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          FIPE_TOKEN: ${{ secrets.FIPE_TOKEN }}
           PYTHONPATH: ${{ github.workspace }}/scrapers
         run: |
           echo "🏠 PESTANA — VEÍCULOS"
