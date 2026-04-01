@@ -49,7 +49,7 @@ jobs:
           echo "☁️  Destino: auctions.tecnologia (Supabase)"
           echo "========================================"
 
-          cd scrapers/pestana/scrapers/pestana
+          cd scrapers/pestana
           python drone.py --output /tmp/drone_coleta.json
 
           echo ""
